@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhishGuard — AI Phishing Detector</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- ── Background grid ── -->
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <!-- ── Header ── -->
+  <header class="site-header">
+    <div class="logo">
+      <span class="logo-icon">⬡</span>
+      <span class="logo-text">PhishGuard</span>
+    </div>
+    <nav class="header-badge">AI · ML · Security</nav>
+  </header>
+
+  <!-- ── Hero ── -->
+  <main class="main">
+    <section class="hero">
+      <div class="hero-tag">Powered by Random Forest ML</div>
+      <h1 class="hero-title">
+        Detect Phishing<br />
+        <span class="accent">Before It's Too Late</span>
+      </h1>
+      <p class="hero-sub">
+        Paste any URL below. Our AI model analyses 18 behavioral features
+        and predicts whether the link is safe or a phishing attempt — in milliseconds.
+      </p>
+    </section>
+
+    <!-- ── Scan Card ── -->
+    <section class="card scan-card" id="scanner">
+      <div class="card-header">
+        <span class="card-label">URL SCANNER</span>
+        <span class="status-dot" id="statusDot"></span>
+      </div>
+
+      <div class="input-group">
+        <span class="input-icon">🔗</span>
+        <input
+          type="url"
+          id="urlInput"
+          class="url-input"
+          placeholder="https://example.com/page?ref=something"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="scan-btn" id="scanBtn" onclick="analyzeURL()">
+          <span class="btn-text">Scan URL</span>
+          <span class="btn-spinner" id="btnSpinner" hidden>⟳</span>
+        </button>
+      </div>
+
+      <div class="example-urls">
+        <span class="example-label">Try an example:</span>
+        <button class="chip" onclick="setExample('https://www.google.com')">google.com</button>
+        <button class="chip" onclick="setExample('http://paypa1-verify-account.ml/login')">Phishing URL</button>
+        <button class="chip" onclick="setExample('http://free-gift-amazon.xyz/claim?user=@admin')">Another Phish</button>
+      </div>
+
+      <!-- Error Banner -->
+      <div class="error-banner" id="errorBanner" hidden>
+        <span class="error-icon">⚠</span>
+        <span id="errorText"></span>
+      </div>
+    </section>
+
+    <!-- ── Result Card (hidden until prediction) ── -->
+    <section class="card result-card" id="resultCard" hidden>
+
+      <div class="result-header" id="resultHeader">
+        <div class="verdict-badge" id="verdictBadge">
+          <span class="verdict-icon" id="verdictIcon"></span>
+          <span class="verdict-label" id="verdictLabel"></span>
+        </div>
+        <div class="risk-pill" id="riskPill"></div>
+      </div>
+
+      <div class="url-display" id="urlDisplay"></div>
+
+      <!-- Confidence bars -->
+      <div class="confidence-section">
+        <div class="conf-row">
+          <span class="conf-name safe">✓ Legitimate</span>
+          <div class="conf-bar-wrap">
+            <div class="conf-bar safe" id="legitBar"></div>
+          </div>
+          <span class="conf-pct" id="legitPct">0%</span>
+        </div>
+        <div class="conf-row">
+          <span class="conf-name danger">✕ Phishing</span>
+          <div class="conf-bar-wrap">
+            <div class="conf-bar danger" id="phishBar"></div>
+          </div>
+          <span class="conf-pct" id="phishPct">0%</span>
+        </div>
+      </div>
+
+      <!-- Feature breakdown toggle -->
+      <details class="feature-details">
+        <summary>View Extracted Features (18 signals)</summary>
+        <div class="features-grid" id="featuresGrid"></div>
+      </details>
+
+      <button class="reset-btn" onclick="resetScanner()">← Scan Another URL</button>
+    </section>
+
+    <!-- ── How It Works ── -->
+    <section class="how-it-works">
+      <h2 class="section-title">How It Works</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <h3>Feature Extraction</h3>
+          <p>18 signals are parsed from your URL — length, dots, HTTPS, suspicious keywords, TLD, IP presence, and more.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <h3>ML Inference</h3>
+          <p>A Random Forest model (200 decision trees) votes on whether the URL pattern matches known phishing behaviour.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <h3>Risk Score</h3>
+          <p>The model outputs a probability score. You get a verdict — Legitimate or Phishing — with a confidence level.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer class="site-footer">
+    <p>PhishGuard &mdash; AI Security Tool &bull; Built with Flask + scikit-learn &bull; For educational purposes</p>
+  </footer>
+
+  <script>
+    // ── Utility ──────────────────────────────────────────────────────────────
+
+    function setExample(url) {
+      document.getElementById('urlInput').value = url;
+      document.getElementById('urlInput').focus();
+    }
+
+    function showError(msg) {
+      const banner = document.getElementById('errorBanner');
+      document.getElementById('errorText').textContent = msg;
+      banner.hidden = false;
+    }
+
+    function clearError() {
+      document.getElementById('errorBanner').hidden = true;
+    }
+
+    function setLoading(on) {
+      const btn     = document.getElementById('scanBtn');
+      const spinner = document.getElementById('btnSpinner');
+      const txt     = btn.querySelector('.btn-text');
+      btn.disabled  = on;
+      spinner.hidden = !on;
+      txt.textContent = on ? 'Scanning…' : 'Scan URL';
+    }
+
+    function resetScanner() {
+      document.getElementById('resultCard').hidden = true;
+      document.getElementById('scanner').hidden    = false;
+      document.getElementById('urlInput').value    = '';
+      clearError();
+    }
+
+    // ── Feature rendering ────────────────────────────────────────────────────
+
+    const FEATURE_LABELS = {
+      url_length:             'URL Length',
+      num_dots:               'Number of Dots',
+      num_hyphens:            'Number of Hyphens',
+      num_underscores:        'Number of Underscores',
+      num_slashes:            'Number of Slashes',
+      num_digits:             'Digit Count',
+      has_at_symbol:          'Contains "@"',
+      has_https:              'Uses HTTPS',
+      has_ip_address:         'IP as Hostname',
+      subdomain_count:        'Subdomain Count',
+      path_length:            'Path Length',
+      num_params:             'Query Parameters',
+      num_suspicious_words:   'Suspicious Keywords',
+      has_suspicious_tld:     'Suspicious TLD',
+      double_slash_redirect:  'Double-Slash Redirect',
+      num_special_chars:      'Special Characters',
+      domain_length:          'Domain Length',
+      has_port:               'Non-standard Port'
+    };
+
+    // Binary features that should be shown as Yes/No
+    const BINARY_FEATURES = new Set([
+      'has_at_symbol', 'has_https', 'has_ip_address',
+      'has_suspicious_tld', 'double_slash_redirect', 'has_port'
+    ]);
+
+    // Features where a high value is suspicious (risk signal)
+    const RISKY_IF_HIGH = new Set([
+      'num_dots', 'num_hyphens', 'num_underscores', 'num_suspicious_words',
+      'has_at_symbol', 'has_ip_address', 'has_suspicious_tld',
+      'double_slash_redirect', 'has_port', 'subdomain_count',
+      'num_special_chars', 'num_params'
+    ]);
+
+    function renderFeatures(features) {
+      const grid = document.getElementById('featuresGrid');
+      grid.innerHTML = '';
+      Object.entries(features).forEach(([key, val]) => {
+        const label   = FEATURE_LABELS[key] || key;
+        const display = BINARY_FEATURES.has(key) ? (val ? 'Yes' : 'No') : val;
+        const isRisky = RISKY_IF_HIGH.has(key) && val > 0;
+
+        const cell = document.createElement('div');
+        cell.className = `feat-cell ${isRisky ? 'risky' : ''}`;
+        cell.innerHTML = `
+          <span class="feat-key">${label}</span>
+          <span class="feat-val">${display}</span>
+        `;
+        grid.appendChild(cell);
+      });
+    }
+
+    // ── Main prediction call ──────────────────────────────────────────────────
+
+    async function analyzeURL() {
+      const url = document.getElementById('urlInput').value.trim();
+      clearError();
+
+      if (!url) { showError('Please enter a URL to scan.'); return; }
+      if (!/^https?:\/\//i.test(url)) {
+        showError('URL must start with http:// or https://'); return;
+      }
+
+      setLoading(true);
+
+      try {
+        const res  = await fetch('/predict', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ url })
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          showError(data.error || 'Prediction failed. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        renderResult(data);
+      } catch (err) {
+        showError('Network error. Is the Flask server running?');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function renderResult(data) {
+      // Hide scanner, show result
+      document.getElementById('scanner').hidden    = true;
+      document.getElementById('resultCard').hidden = false;
+
+      // Verdict badge
+      const badge = document.getElementById('verdictBadge');
+      const icon  = document.getElementById('verdictIcon');
+      const lbl   = document.getElementById('verdictLabel');
+      badge.className = `verdict-badge ${data.is_safe ? 'safe' : 'danger'}`;
+      icon.textContent  = data.is_safe ? '✓' : '✕';
+      lbl.textContent   = data.label;
+
+      // Risk pill
+      const pill = document.getElementById('riskPill');
+      pill.textContent  = `Risk: ${data.risk_level}`;
+      pill.className    = `risk-pill risk-${data.risk_level.toLowerCase().replace(' ', '-')}`;
+
+      // URL display
+      document.getElementById('urlDisplay').textContent = data.url;
+
+      // Confidence bars (animate)
+      const legitBar = document.getElementById('legitBar');
+      const phishBar = document.getElementById('phishBar');
+      const legitPct = document.getElementById('legitPct');
+      const phishPct = document.getElementById('phishPct');
+
+      // Reset first
+      legitBar.style.width = '0%';
+      phishBar.style.width = '0%';
+
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          legitBar.style.width = data.legit_prob + '%';
+          phishBar.style.width = data.phish_prob + '%';
+          legitPct.textContent = data.legit_prob.toFixed(1) + '%';
+          phishPct.textContent = data.phish_prob.toFixed(1) + '%';
+        }, 80);
+      });
+
+      // Features
+      renderFeatures(data.features);
+    }
+
+    // Allow pressing Enter to scan
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('urlInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') analyzeURL();
+      });
+    });
+  </script>
+</body>
+</html>
